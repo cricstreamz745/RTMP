@@ -1,11 +1,8 @@
 const NodeMediaServer = require('node-media-server');
-const fs = require('fs');
+const path = require('path');
 
-// Load stream keys from users.json
-const users = JSON.parse(fs.readFileSync('./users.json', 'utf-8'));
-
-// Configuration for RTMP, HTTP, and HLS
 const config = {
+  logType: 3, // Optional: log only errors
   rtmp: {
     port: 1935,
     chunk_size: 60000,
@@ -18,35 +15,30 @@ const config = {
     allow_origin: '*'
   },
   trans: {
-    ffmpeg: '/usr/bin/ffmpeg', // Make sure ffmpeg is installed and path is correct
+    ffmpeg: '/usr/bin/ffmpeg', // Or just 'ffmpeg' if it's in PATH
     tasks: [
       {
         app: 'live',
+        vc: 'copy',
+        ac: 'aac',
         hls: true,
-        hlsKeep: true, // Keeps HLS files for debugging
-        mediaRoot: './media', // ✅ FIX: Location to store HLS segments
-        hlsFlags: '[hls_time=2:hls_list_size=3:hls_flags=delete_segments]'
+        hlsFlags: '[hls_time=2:hls_list_size=3:hls_flags=delete_segments]',
+        dash: false,
+        mediaRoot: path.join(__dirname, 'media'), // ✅ Important fix
+        output: path.join(__dirname, 'public')    // Optional: serve from /public
       }
     ]
   }
 };
 
-// Create NodeMediaServer instance
 const nms = new NodeMediaServer(config);
 
-// Authenticate stream key before accepting a stream
-nms.on('prePublish', (id, streamPath, args) => {
-  const streamKey = streamPath.split('/')[2]; // Extract key from rtmp://domain/live/KEY
-  const isValid = users.some(user => user.stream_key === streamKey);
-
-  if (!isValid) {
-    console.log(`[REJECTED STREAM] Invalid stream key: ${streamKey}`);
-    const session = nms.getSession(id);
-    session.reject();
-  } else {
-    console.log(`[ACCEPTED STREAM] ${streamKey}`);
-  }
+nms.on('prePublish', (id, StreamPath, args) => {
+  console.log('[RTMP Publish] id=', id, 'StreamPath=', StreamPath);
 });
 
-// Start server
+nms.on('donePublish', (id, StreamPath, args) => {
+  console.log('[RTMP Done] id=', id, 'StreamPath=', StreamPath);
+});
+
 nms.run();
